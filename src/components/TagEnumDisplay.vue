@@ -10,37 +10,43 @@
       </a-space>
     </template>
     
-    <div class="tag-enum-container">
-      <div v-if="allTags.length > 0" class="tag-list">
-        <a-tag
-          v-for="(tag, index) in allTags"
-          :key="tag"
-          :color="getTagColor(index)"
-          class="enum-tag"
-          @click="handleTagClick(tag)"
-        >
-          {{ tag }}
-          <span class="tag-count">({{ getTagCount(tag) }})</span>
-        </a-tag>
-      </div>
-      <div v-else class="no-tags">
-        <a-empty description="暂无标签数据" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
-      </div>
-    </div>
+          <div class="tag-enum-container">
+            <a-spin :spinning="loading" tip="加载标签中...">
+              <div v-if="allTags.length > 0" class="tag-list">
+                <a-tag
+                  v-for="(tag, index) in allTags"
+                  :key="tag"
+                  :color="getTagColor(index)"
+                  class="enum-tag"
+                  @click="handleTagClick(tag)"
+                >
+                  {{ tag }}
+                  <span class="tag-count" v-if="!useAPI">({{ getTagCount(tag) }})</span>
+                </a-tag>
+              </div>
+              <div v-else-if="!loading" class="no-tags">
+                <a-empty description="暂无标签数据" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+              </div>
+            </a-spin>
+          </div>
   </a-card>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { message, Empty } from 'ant-design-vue'
 import { CopyOutlined } from '@ant-design/icons-vue'
+import { getAllDistinctTags } from '../api/vulnerability'
 
 // Props
 const props = defineProps({
   vulnerabilities: {
     type: Array,
-    required: true,
     default: () => []
+  },
+  useAPI: {
+    type: Boolean,
+    default: true
   },
   title: {
     type: String,
@@ -55,15 +61,57 @@ const props = defineProps({
 // Emits
 const emit = defineEmits(['tag-click'])
 
+// 响应式数据
+const allTagsFromAPI = ref([])
+const loading = ref(false)
+
 // 计算属性：所有标签
 const allTags = computed(() => {
-  const tagSet = new Set()
-  props.vulnerabilities.forEach(vuln => {
-    if (vuln.tag && Array.isArray(vuln.tag)) {
-      vuln.tag.forEach(tag => tagSet.add(tag))
+  if (props.useAPI) {
+    return allTagsFromAPI.value
+  } else {
+    // 兼容模式：从vulnerabilities中提取标签
+    const tagSet = new Set()
+    props.vulnerabilities.forEach(vuln => {
+      if (vuln.tag && Array.isArray(vuln.tag)) {
+        vuln.tag.forEach(tag => tagSet.add(tag))
+      }
+    })
+    return Array.from(tagSet).sort()
+  }
+})
+
+// 加载标签数据
+const loadTags = async () => {
+  if (!props.useAPI) return
+  
+  loading.value = true
+  try {
+    const response = await getAllDistinctTags()
+    if (response.data && response.data.code === '0000') {
+      allTagsFromAPI.value = response.data.data || []
+    } else {
+      allTagsFromAPI.value = []
     }
-  })
-  return Array.from(tagSet).sort()
+  } catch (error) {
+    console.error('加载标签失败:', error)
+    allTagsFromAPI.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+// 组件挂载时加载标签
+onMounted(() => {
+  if (props.useAPI) {
+    loadTags()
+  }
+})
+
+// 暴露方法给父组件
+defineExpose({
+  loadTags,
+  allTagsFromAPI
 })
 
 // 获取标签颜色（循环使用不同颜色）

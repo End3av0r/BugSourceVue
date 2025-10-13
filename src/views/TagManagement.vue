@@ -62,9 +62,10 @@
     <a-row :gutter="[24, 24]" style="margin-top: 24px;">
       <a-col :span="24">
         <TagEnumDisplay 
-          :vulnerabilities="vulnerabilities"
+          :use-api="true"
           title="标签枚举"
           @tag-click="selectTag"
+          ref="tagEnumRef"
         />
       </a-col>
     </a-row>
@@ -155,19 +156,21 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { ReloadOutlined } from '@ant-design/icons-vue'
-import { getLatestVulnerabilities } from '../api/vulnerability'
+import { getLatestVulnerabilities, getAllDistinctTags } from '../api/vulnerability'
 import VulnTagManager from '../components/VulnTagManager.vue'
 import TagEnumDisplay from '../components/TagEnumDisplay.vue'
 
 const router = useRouter()
 const loading = ref(false)
 const vulnerabilities = ref([])
+const allTagsFromAPI = ref([]) // 从API获取的所有标签
 const searchKeyword = ref('')
 const selectedTag = ref(undefined)
 const batchEditModalVisible = ref(false)
 const batchEditing = ref(false)
 const selectedRecord = ref(null)
 const batchTags = ref([])
+const tagEnumRef = ref(null)
 
 // 分页配置
 const pagination = reactive({
@@ -226,15 +229,9 @@ const columns = [
   }
 ]
 
-// 计算属性：所有标签
+// 计算属性：所有标签（从API获取）
 const allTags = computed(() => {
-  const tagSet = new Set()
-  vulnerabilities.value.forEach(vuln => {
-    if (vuln.tag && Array.isArray(vuln.tag)) {
-      vuln.tag.forEach(tag => tagSet.add(tag))
-    }
-  })
-  return Array.from(tagSet).sort()
+  return allTagsFromAPI.value
 })
 
 // 计算属性：使用中的标签
@@ -292,16 +289,27 @@ const getHazardLevelColor = (level) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const response = await getLatestVulnerabilities(1000, 0)
+    // 并行加载漏洞数据和标签数据
+    const [vulnResponse, tagsResponse] = await Promise.all([
+      getLatestVulnerabilities(1000, 0),
+      getAllDistinctTags()
+    ])
     
-    if (response.data && response.data.code === '0000') {
-      vulnerabilities.value = response.data.data || []
+    if (vulnResponse.data && vulnResponse.data.code === '0000') {
+      vulnerabilities.value = vulnResponse.data.data || []
     } else {
       vulnerabilities.value = []
     }
+    
+    if (tagsResponse.data && tagsResponse.data.code === '0000') {
+      allTagsFromAPI.value = tagsResponse.data.data || []
+    } else {
+      allTagsFromAPI.value = []
+    }
   } catch (error) {
-    console.error('加载漏洞数据失败:', error)
+    console.error('加载数据失败:', error)
     vulnerabilities.value = []
+    allTagsFromAPI.value = []
   } finally {
     loading.value = false
   }
@@ -359,18 +367,24 @@ const handleTagsUpdated = (record, newTags) => {
 // 处理标签添加事件
 const handleTagAdded = (tag) => {
   console.log('标签添加成功:', tag)
-  // 重新加载数据以获取最新的标签统计信息
+  // 重新加载数据和标签枚举
   setTimeout(() => {
     loadData()
+    if (tagEnumRef.value) {
+      tagEnumRef.value.loadTags()
+    }
   }, 500) // 延迟500ms确保后端数据已更新
 }
 
 // 处理标签删除事件
 const handleTagDeleted = (tag) => {
   console.log('标签删除成功:', tag)
-  // 重新加载数据以获取最新的标签统计信息
+  // 重新加载数据和标签枚举
   setTimeout(() => {
     loadData()
+    if (tagEnumRef.value) {
+      tagEnumRef.value.loadTags()
+    }
   }, 500) // 延迟500ms确保后端数据已更新
 }
 

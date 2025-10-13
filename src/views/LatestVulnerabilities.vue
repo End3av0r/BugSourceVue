@@ -2,10 +2,11 @@
   <div class="latest-vulnerabilities">
     <!-- 标签枚举显示 -->
     <TagEnumDisplay 
-      :vulnerabilities="allVulnerabilities"
+      :use-api="true"
       title="当前标签枚举"
       @tag-click="handleTagEnumClick"
       style="margin-bottom: 16px;"
+      ref="tagEnumRef"
     />
     
     <a-card title="最新漏洞数据" :bordered="false">
@@ -63,6 +64,7 @@ const router = useRouter()
 const loading = ref(false)
 const vulnerabilities = ref([]) // 用于表格展示的当前页数据
 const allVulnerabilities = ref([]) // 用于存储从服务器获取的完整数据（最多1000条）
+const tagEnumRef = ref(null)
 const MAX_DATA_LIMIT = 1000 // 限制仅加载最新的1000条数据
 
 // 表格列定义
@@ -206,18 +208,24 @@ const handleTagsUpdated = (record, newTags) => {
 // 处理标签添加事件
 const handleTagAdded = (tag) => {
   console.log('标签添加成功:', tag)
-  // 重新加载数据以获取最新的标签信息
+  // 重新加载数据和标签枚举
   setTimeout(() => {
     refreshData()
+    if (tagEnumRef.value) {
+      tagEnumRef.value.loadTags()
+    }
   }, 500)
 }
 
 // 处理标签删除事件
 const handleTagDeleted = (tag) => {
   console.log('标签删除成功:', tag)
-  // 重新加载数据以获取最新的标签信息
+  // 重新加载数据和标签枚举
   setTimeout(() => {
     refreshData()
+    if (tagEnumRef.value) {
+      tagEnumRef.value.loadTags()
+    }
   }, 500)
 }
 
