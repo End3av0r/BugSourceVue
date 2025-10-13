@@ -25,6 +25,12 @@
               <span>条件查询</span>
             </router-link>
           </a-menu-item>
+          <a-menu-item key="ai-parse">
+            <router-link to="/ai-parse">
+              <robot-outlined />
+              <span>AI解析</span>
+            </router-link>
+          </a-menu-item>
         </a-menu>
       </a-layout-sider>
       <a-layout>
@@ -79,6 +85,7 @@ import {
   DashboardOutlined,
   AlertOutlined,
   SearchOutlined,
+  RobotOutlined,
   MenuUnfoldOutlined,
   MenuFoldOutlined,
   BellOutlined,
@@ -95,6 +102,7 @@ watch(
     if (path === '/') selectedKeys.value = ['dashboard']
     else if (path === '/latest') selectedKeys.value = ['latest']
     else if (path === '/search') selectedKeys.value = ['search']
+    else if (path === '/ai-parse') selectedKeys.value = ['ai-parse']
   },
   { immediate: true }
 )

@@ -17,6 +17,11 @@ const routes = [
     component: () => import('../views/SearchVulnerabilities.vue')
   },
   {
+    path: '/ai-parse',
+    name: 'AIParseVulnerability',
+    component: () => import('../views/AIParseVulnerability.vue')
+  },
+  {
     path: '/detail/:id',
     name: 'VulnerabilityDetail',
     component: () => import('../views/VulnerabilityDetail.vue')
