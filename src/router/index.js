@@ -25,6 +25,11 @@ const routes = [
     path: '/detail/:id',
     name: 'VulnerabilityDetail',
     component: () => import('../views/VulnerabilityDetail.vue')
+  },
+  {
+    path: '/tag-management',
+    name: 'TagManagement',
+    component: () => import('../views/TagManagement.vue')
   }
 ]
 

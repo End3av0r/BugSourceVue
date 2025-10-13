@@ -31,6 +31,12 @@
               <span>AI解析</span>
             </router-link>
           </a-menu-item>
+          <a-menu-item key="tag-management">
+            <router-link to="/tag-management">
+              <tags-outlined />
+              <span>标签管理</span>
+            </router-link>
+          </a-menu-item>
         </a-menu>
       </a-layout-sider>
       <a-layout>
@@ -86,6 +92,7 @@ import {
   AlertOutlined,
   SearchOutlined,
   RobotOutlined,
+  TagsOutlined,
   MenuUnfoldOutlined,
   MenuFoldOutlined,
   BellOutlined,
@@ -103,6 +110,7 @@ watch(
     else if (path === '/latest') selectedKeys.value = ['latest']
     else if (path === '/search') selectedKeys.value = ['search']
     else if (path === '/ai-parse') selectedKeys.value = ['ai-parse']
+    else if (path === '/tag-management') selectedKeys.value = ['tag-management']
   },
   { immediate: true }
 )

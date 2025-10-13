@@ -1,5 +1,13 @@
 <template>
   <div class="latest-vulnerabilities">
+    <!-- 标签枚举显示 -->
+    <TagEnumDisplay 
+      :vulnerabilities="allVulnerabilities"
+      title="当前标签枚举"
+      @tag-click="handleTagEnumClick"
+      style="margin-bottom: 16px;"
+    />
+    
     <a-card title="最新漏洞数据" :bordered="false">
       <template #extra>
         <a-button type="primary" @click="refreshData">
@@ -24,9 +32,14 @@
           </template>
           
           <template v-if="column.key === 'tags'">
-            <a-space>
-              <a-tag v-for="tag in record.tags" :key="tag" color="blue">{{ tag }}</a-tag>
-            </a-space>
+            <VulnTagManager 
+              :vuln-id="record.id"
+              :tags="record.tag || []"
+              title=""
+              @tags-updated="(newTags) => handleTagsUpdated(record, newTags)"
+              @tag-added="handleTagAdded"
+              @tag-deleted="handleTagDeleted"
+            />
           </template>
           
           <template v-if="column.key === 'action'">
@@ -43,6 +56,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ReloadOutlined } from '@ant-design/icons-vue'
 import { getLatestVulnerabilities } from '../api/vulnerability'
+import VulnTagManager from '../components/VulnTagManager.vue'
+import TagEnumDisplay from '../components/TagEnumDisplay.vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -176,6 +191,40 @@ const handleTableChange = (pag) => {
 // 查看详情
 const viewDetail = (id) => {
   router.push(`/detail/${id}`)
+}
+
+// 处理标签更新
+const handleTagsUpdated = (record, newTags) => {
+  record.tag = newTags
+  // 同时更新allVulnerabilities中对应的记录
+  const index = allVulnerabilities.value.findIndex(item => item.id === record.id)
+  if (index > -1) {
+    allVulnerabilities.value[index].tag = newTags
+  }
+}
+
+// 处理标签添加事件
+const handleTagAdded = (tag) => {
+  console.log('标签添加成功:', tag)
+  // 重新加载数据以获取最新的标签信息
+  setTimeout(() => {
+    refreshData()
+  }, 500)
+}
+
+// 处理标签删除事件
+const handleTagDeleted = (tag) => {
+  console.log('标签删除成功:', tag)
+  // 重新加载数据以获取最新的标签信息
+  setTimeout(() => {
+    refreshData()
+  }, 500)
+}
+
+// 处理标签枚举点击
+const handleTagEnumClick = (tag) => {
+  console.log('点击标签枚举:', tag)
+  // 这里可以添加筛选逻辑，比如跳转到标签管理页面并筛选该标签
 }
 
 // 页面挂载时加载初始数据
