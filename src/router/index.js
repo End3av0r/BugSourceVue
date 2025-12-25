@@ -30,6 +30,11 @@ const routes = [
     path: '/tag-management',
     name: 'TagManagement',
     component: () => import('../views/TagManagement.vue')
+  },
+  {
+    path: '/tag-definition',
+    name: 'TagDefinitionManagement',
+    component: () => import('../views/TagDefinitionManagement.vue')
   }
 ]
 

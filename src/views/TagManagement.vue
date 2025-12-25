@@ -2,7 +2,7 @@
   <div class="tag-management">
     <a-page-header
       style="border: 1px solid rgb(235, 237, 240)"
-      title="标签管理"
+      title="漏洞标签管理"
       sub-title="管理所有漏洞的标签"
     />
     
@@ -62,10 +62,9 @@
     <a-row :gutter="[24, 24]" style="margin-top: 24px;">
       <a-col :span="24">
         <TagEnumDisplay 
-          :use-api="true"
+          :vulnerabilities="vulnerabilities"
           title="标签枚举"
           @tag-click="selectTag"
-          ref="tagEnumRef"
         />
       </a-col>
     </a-row>
@@ -170,7 +169,6 @@ const batchEditModalVisible = ref(false)
 const batchEditing = ref(false)
 const selectedRecord = ref(null)
 const batchTags = ref([])
-const tagEnumRef = ref(null)
 
 // 分页配置
 const pagination = reactive({
@@ -217,7 +215,7 @@ const columns = [
     width: 100
   },
   {
-    title: '标签管理',
+    title: '漏洞标签管理',
     key: 'tags',
     width: 300
   },
@@ -367,24 +365,18 @@ const handleTagsUpdated = (record, newTags) => {
 // 处理标签添加事件
 const handleTagAdded = (tag) => {
   console.log('标签添加成功:', tag)
-  // 重新加载数据和标签枚举
+  // 重新加载数据以获取最新的标签统计信息
   setTimeout(() => {
     loadData()
-    if (tagEnumRef.value) {
-      tagEnumRef.value.loadTags()
-    }
   }, 500) // 延迟500ms确保后端数据已更新
 }
 
 // 处理标签删除事件
 const handleTagDeleted = (tag) => {
   console.log('标签删除成功:', tag)
-  // 重新加载数据和标签枚举
+  // 重新加载数据以获取最新的标签统计信息
   setTimeout(() => {
     loadData()
-    if (tagEnumRef.value) {
-      tagEnumRef.value.loadTags()
-    }
   }, 500) // 延迟500ms确保后端数据已更新
 }
 

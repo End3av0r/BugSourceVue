@@ -34,9 +34,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { message, Empty } from 'ant-design-vue'
+import { message, Empty, Modal } from 'ant-design-vue'
 import { CopyOutlined } from '@ant-design/icons-vue'
 import { getAllDistinctTags } from '../api/vulnerability'
+import { getTagByName } from '../api/tag'
 
 // Props
 const props = defineProps({
@@ -128,10 +129,28 @@ const getTagCount = (tag) => {
 }
 
 // 处理标签点击
-const handleTagClick = (tag) => {
-  if (props.clickable) {
-    emit('tag-click', tag)
+const handleTagClick = async (tag) => {
+  if (!props.clickable) return
+
+  try {
+    const response = await getTagByName(tag)
+    if (response.data && response.data.code === '0000') {
+      const tagInfo = response.data.data
+      Modal.info({
+        title: `标签：${tagInfo.tagName}`,
+        content: tagInfo.description || '暂无描述',
+        okText: '关闭',
+        width: 500
+      })
+    } else {
+      message.warning('未找到标签描述信息')
+    }
+  } catch (error) {
+    console.error('获取标签详情失败:', error)
+    message.error('获取标签详情失败')
   }
+
+  emit('tag-click', tag)
 }
 
 // 复制所有标签枚举

@@ -37,16 +37,26 @@
       :confirm-loading="adding"
     >
       <a-form :model="addTagForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 18 }">
-        <a-form-item label="标签内容" :rules="[{ required: true, message: '请输入标签内容' }]">
-          <a-input
+        <a-form-item label="标签内容" :rules="[{ required: true, message: '请选择标签' }]">
+          <a-select
             v-model:value="addTagForm.tag"
-            placeholder="请输入标签内容"
-            @pressEnter="handleAddTag"
-          />
+            placeholder="请选择标签"
+            show-search
+            :filter-option="filterOption"
+            :loading="loadingTags"
+          >
+            <a-select-option
+              v-for="tag in availableTags"
+              :key="tag"
+              :value="tag"
+            >
+              {{ tag }}
+            </a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item label="提示">
           <a-text type="secondary">
-            标签将用于分类和搜索漏洞，建议使用简洁明确的词汇
+            请从下拉列表中选择已定义的标签
           </a-text>
         </a-form-item>
       </a-form>
@@ -55,10 +65,11 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import { addVulnTag, deleteVulnTag } from '../api/vulnerability'
+import { getAllTags } from '../api/tag'
 
 // Props
 const props = defineProps({
@@ -72,7 +83,7 @@ const props = defineProps({
   },
   title: {
     type: String,
-    default: '标签管理'
+    default: '漏洞标签管理'
   }
 })
 
@@ -86,19 +97,50 @@ const adding = ref(false)
 const addTagForm = ref({
   tag: ''
 })
+const allTags = ref([])
+const loadingTags = ref(false)
 
 // 计算属性
 const vulnId = computed(() => props.vulnId)
+
+// 计算可用的标签（排除已添加的标签）
+const availableTags = computed(() => {
+  return allTags.value.filter(tag => !currentTags.value.includes(tag))
+})
 
 // 监听props.tags变化
 watch(() => props.tags, (newTags) => {
   currentTags.value = [...newTags]
 }, { deep: true })
 
+// 加载所有标签
+const loadAllTags = async () => {
+  loadingTags.value = true
+  try {
+    const response = await getAllTags()
+    if (response.data && response.data.code === '0000') {
+      allTags.value = response.data.data || []
+    } else {
+      message.error('加载标签列表失败')
+    }
+  } catch (error) {
+    console.error('加载标签列表失败:', error)
+    message.error('加载标签列表失败')
+  } finally {
+    loadingTags.value = false
+  }
+}
+
+// 下拉框搜索过滤
+const filterOption = (input, option) => {
+  return option.value.toLowerCase().indexOf(input.toLowerCase()) >= 0
+}
+
 // 显示添加标签模态框
 const showAddModal = () => {
   addTagForm.value.tag = ''
   addModalVisible.value = true
+  loadAllTags()
 }
 
 // 处理添加标签

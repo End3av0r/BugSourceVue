@@ -34,7 +34,13 @@
           <a-menu-item key="tag-management">
             <router-link to="/tag-management">
               <tags-outlined />
-              <span>标签管理</span>
+              <span>漏洞标签</span>
+            </router-link>
+          </a-menu-item>
+          <a-menu-item key="tag-definition">
+            <router-link to="/tag-definition">
+              <tags-outlined />
+              <span>标签定义</span>
             </router-link>
           </a-menu-item>
         </a-menu>
@@ -111,6 +117,7 @@ watch(
     else if (path === '/search') selectedKeys.value = ['search']
     else if (path === '/ai-parse') selectedKeys.value = ['ai-parse']
     else if (path === '/tag-management') selectedKeys.value = ['tag-management']
+    else if (path === '/tag-definition') selectedKeys.value = ['tag-definition']
   },
   { immediate: true }
 )
