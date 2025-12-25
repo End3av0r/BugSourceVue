@@ -1,14 +1,5 @@
 <template>
   <div class="latest-vulnerabilities">
-    <!-- 标签枚举显示 -->
-    <TagEnumDisplay 
-      :use-api="true"
-      title="当前标签枚举"
-      @tag-click="handleTagEnumClick"
-      style="margin-bottom: 16px;"
-      ref="tagEnumRef"
-    />
-    
     <a-card title="最新漏洞数据" :bordered="false">
       <template #extra>
         <a-button type="primary" @click="refreshData">
@@ -33,10 +24,11 @@
           </template>
           
           <template v-if="column.key === 'tags'">
-            <VulnTagManager 
+            <VulnTagManager
               :vuln-id="record.id"
               :tags="record.tag || []"
               title=""
+              :compact="true"
               @tags-updated="(newTags) => handleTagsUpdated(record, newTags)"
               @tag-added="handleTagAdded"
               @tag-deleted="handleTagDeleted"
@@ -58,13 +50,11 @@ import { useRouter } from 'vue-router'
 import { ReloadOutlined } from '@ant-design/icons-vue'
 import { getLatestVulnerabilities } from '../api/vulnerability'
 import VulnTagManager from '../components/VulnTagManager.vue'
-import TagEnumDisplay from '../components/TagEnumDisplay.vue'
 
 const router = useRouter()
 const loading = ref(false)
 const vulnerabilities = ref([]) // 用于表格展示的当前页数据
 const allVulnerabilities = ref([]) // 用于存储从服务器获取的完整数据（最多1000条）
-const tagEnumRef = ref(null)
 const MAX_DATA_LIMIT = 1000 // 限制仅加载最新的1000条数据
 
 // 表格列定义
@@ -208,31 +198,19 @@ const handleTagsUpdated = (record, newTags) => {
 // 处理标签添加事件
 const handleTagAdded = (tag) => {
   console.log('标签添加成功:', tag)
-  // 重新加载数据和标签枚举
+  // 重新加载数据
   setTimeout(() => {
     refreshData()
-    if (tagEnumRef.value) {
-      tagEnumRef.value.loadTags()
-    }
   }, 500)
 }
 
 // 处理标签删除事件
 const handleTagDeleted = (tag) => {
   console.log('标签删除成功:', tag)
-  // 重新加载数据和标签枚举
+  // 重新加载数据
   setTimeout(() => {
     refreshData()
-    if (tagEnumRef.value) {
-      tagEnumRef.value.loadTags()
-    }
   }, 500)
-}
-
-// 处理标签枚举点击
-const handleTagEnumClick = (tag) => {
-  console.log('点击标签枚举:', tag)
-  // 这里可以添加筛选逻辑，比如跳转到标签管理页面并筛选该标签
 }
 
 // 页面挂载时加载初始数据

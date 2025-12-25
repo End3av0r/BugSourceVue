@@ -2,12 +2,17 @@
   <div class="vuln-tag-manager">
     <a-card :title="title" :bordered="false" size="small">
       <template #extra>
-        <a-button type="primary" size="small" @click="showAddModal">
+        <a-button
+          v-if="!compact"
+          type="primary"
+          size="small"
+          @click="showAddModal"
+        >
           <template #icon><PlusOutlined /></template>
           添加标签
         </a-button>
       </template>
-      
+
       <!-- 标签展示区域 -->
       <div class="tags-container">
         <a-space wrap>
@@ -21,7 +26,16 @@
           >
             {{ tag }}
           </a-tag>
-          <span v-if="currentTags.length === 0" class="no-tags">
+          <a-button
+            v-if="compact"
+            type="dashed"
+            size="small"
+            @click="showAddModal"
+            class="add-tag-btn-compact"
+          >
+            <template #icon><PlusOutlined /></template>
+          </a-button>
+          <span v-if="currentTags.length === 0 && !compact" class="no-tags">
             暂无标签
           </span>
         </a-space>
@@ -84,6 +98,10 @@ const props = defineProps({
   title: {
     type: String,
     default: '漏洞标签管理'
+  },
+  compact: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -228,6 +246,21 @@ const handleCancelAdd = () => {
 .no-tags {
   color: #999;
   font-style: italic;
+}
+
+.add-tag-btn-compact {
+  border-style: dashed;
+  border-color: #d9d9d9;
+  color: #1890ff;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  transition: all 0.3s;
+}
+
+.add-tag-btn-compact:hover {
+  border-color: #40a9ff;
+  color: #40a9ff;
 }
 
 :deep(.ant-tag) {

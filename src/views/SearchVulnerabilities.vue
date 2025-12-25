@@ -28,8 +28,8 @@
         <a-row :gutter="16">
           <a-col :span="12">
             <a-form-item label="时间范围" name="dateRange">
-              <a-range-picker 
-                v-model:value="formState.dateRange" 
+              <a-range-picker
+                v-model:value="formState.dateRange"
                 style="width: 100%"
                 format="YYYY-MM-DD"
               />
@@ -43,9 +43,29 @@
                 mode="multiple"
                 style="width: 100%"
               >
-                <a-select-option value="高危">高危</a-select-option>
-                <a-select-option value="中危">中危</a-select-option>
-                <a-select-option value="低危">低危</a-select-option>
+                <a-select-option value="高">高危</a-select-option>
+                <a-select-option value="中">中危</a-select-option>
+                <a-select-option value="低">低危</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
+
+        <a-row :gutter="16">
+          <a-col :span="24">
+            <a-form-item label="标签" name="tags">
+              <a-select
+                v-model:value="formState.tags"
+                placeholder="请选择标签（可多选）"
+                mode="multiple"
+                style="width: 100%"
+                :loading="tagsLoading"
+                show-search
+                :filter-option="filterOption"
+              >
+                <a-select-option v-for="tag in availableTags" :key="tag" :value="tag">
+                  {{ tag }}
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
@@ -83,9 +103,15 @@
           </template>
           
           <template v-if="column.key === 'tags'">
-            <a-space>
-              <a-tag v-for="tag in record.tag" :key="tag" color="blue">{{ tag }}</a-tag>
-            </a-space>
+            <VulnTagManager
+              :vuln-id="record.id"
+              :tags="record.tag || []"
+              title=""
+              :compact="true"
+              @tags-updated="(newTags) => handleTagsUpdated(record, newTags)"
+              @tag-added="handleTagAdded"
+              @tag-deleted="handleTagDeleted"
+            />
           </template>
           
           <template v-if="column.key === 'action'">
@@ -101,11 +127,14 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { SearchOutlined, ClearOutlined } from '@ant-design/icons-vue'
-import { searchVulnerabilities } from '../api/vulnerability'
+import { searchVulnerabilities, getAllDistinctTags } from '../api/vulnerability'
+import VulnTagManager from '../components/VulnTagManager.vue'
 
 const router = useRouter()
 const loading = ref(false)
 const vulnerabilities = ref([])
+const availableTags = ref([])
+const tagsLoading = ref(false)
 
 // 表单状态
 const formState = reactive({
@@ -113,7 +142,8 @@ const formState = reactive({
   cveId: '',
   cnvdId: '',
   dateRange: null,
-  hazardLevel: []
+  hazardLevel: [],
+  tags: []
 })
 
 // 表格列定义
@@ -181,6 +211,26 @@ const getHazardLevelColor = (level) => {
   return colors[level] || 'blue'
 }
 
+// 加载可用标签列表
+const loadAvailableTags = async () => {
+  tagsLoading.value = true
+  try {
+    const response = await getAllDistinctTags()
+    if (response.data && response.data.code === '0000') {
+      availableTags.value = response.data.data || []
+    }
+  } catch (error) {
+    console.error('加载标签列表失败:', error)
+  } finally {
+    tagsLoading.value = false
+  }
+}
+
+// 标签选择器的过滤函数
+const filterOption = (input, option) => {
+  return option.value.toLowerCase().indexOf(input.toLowerCase()) >= 0
+}
+
 // 查询数据
 const loadData = async () => {
   loading.value = true
@@ -193,13 +243,23 @@ const loadData = async () => {
       limit: pagination.pageSize,
       offset: (pagination.current - 1) * pagination.pageSize
     }
-    
+
     // 添加时间范围
     if (formState.dateRange && formState.dateRange.length === 2) {
       params.startDate = formState.dateRange[0].format('YYYY-MM-DD')
       params.endDate = formState.dateRange[1].format('YYYY-MM-DD')
     }
-    
+
+    // 添加标签筛选
+    if (formState.tags && formState.tags.length > 0) {
+      params.tags = formState.tags
+    }
+
+    // 添加危害等级筛选
+    if (formState.hazardLevel && formState.hazardLevel.length > 0) {
+      params.hazardLevels = formState.hazardLevel
+    }
+
     const response = await searchVulnerabilities(params)
     
     if (response.data && response.data.code === '0000') {
@@ -233,7 +293,11 @@ const onSearch = () => {
 // 重置表单
 const resetForm = () => {
   Object.keys(formState).forEach(key => {
-    formState[key] = key === 'hazardLevel' ? [] : null
+    if (key === 'hazardLevel' || key === 'tags') {
+      formState[key] = []
+    } else {
+      formState[key] = null
+    }
   })
   pagination.current = 1
   loadData()
@@ -246,12 +310,30 @@ const handleTableChange = (pag) => {
   loadData()
 }
 
+// 处理标签更新
+const handleTagsUpdated = (record, newTags) => {
+  record.tag = newTags
+}
+
+// 处理标签添加
+const handleTagAdded = (tag) => {
+  console.log('标签添加成功:', tag)
+  loadAvailableTags()
+}
+
+// 处理标签删除
+const handleTagDeleted = (tag) => {
+  console.log('标签删除成功:', tag)
+  loadAvailableTags()
+}
+
 // 查看详情
 const viewDetail = (id) => {
   router.push(`/detail/${id}`)
 }
 
 onMounted(() => {
+  loadAvailableTags()
   loadData()
 })
 </script>

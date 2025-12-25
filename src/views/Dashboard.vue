@@ -46,25 +46,32 @@
      <a-row :gutter="[24, 24]" class="chart-row">
       <!-- 威胁程度饼状图 -->
       <a-col :xs="24" :lg="12">
-        <a-card title="各威胁程度漏洞占比" :bordered="false" class="chart-card">
+        <a-card title="各威胁程度漏洞占比（总）" :bordered="false" class="chart-card">
           <div ref="hazardPieChartRef" class="chart-container"></div>
         </a-card>
       </a-col>
-      
-      <!-- 漏洞类型饼状图 -->
+
+      <!-- 标签统计饼状图 -->
       <a-col :xs="24" :lg="12">
-        <a-card title="各漏洞类型占比" :bordered="false" class="chart-card"> <!-- 建议修改卡片标题 -->
-          <div ref="typeBarChartRef" class="chart-container"></div>
+        <a-card title="各标签漏洞数量占比（总）" :bordered="false" class="chart-card">
+          <div ref="tagPieChartRef" class="chart-container"></div>
         </a-card>
       </a-col>
     </a-row>
 
-    <!-- 3. 图表区域：近7天柱状图 + 近12月折线图 -->
+    <!-- 3. 图表区域：每日新增趋势（Tabs） + 近12月折线图 -->
     <a-row :gutter="[24, 24]" class="chart-row">
-      <!-- 近7天每日新增柱状图 -->
+      <!-- 每日新增趋势（带标签页） -->
       <a-col :xs="24" :lg="24">
-        <a-card title="近7天每日新增漏洞数量" :bordered="false" class="chart-card">
-          <div ref="dailyChartRef" class="chart-container"></div>
+        <a-card title="每日新增漏洞趋势" :bordered="false" class="chart-card">
+          <a-tabs v-model:activeKey="dailyTabKey">
+            <a-tab-pane key="7days" tab="近7天">
+              <div ref="dailyChartRef" class="chart-container"></div>
+            </a-tab-pane>
+            <a-tab-pane key="30days" tab="近30天">
+              <div ref="thirtyDaysChartRef" class="chart-container"></div>
+            </a-tab-pane>
+          </a-tabs>
         </a-card>
       </a-col>
 
@@ -79,13 +86,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, onUnmounted } from 'vue'
+import { ref, onMounted, reactive, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
-import { 
-  getDailyNewVuln, 
-  getMonthlyNewVuln, 
+import {
+  getDailyNewVuln,
+  getMonthlyNewVuln,
   getVulnerabilityHazardStats,
-  getVulnerabilityTypeCount // <-- 新增
+  getTagCount
 } from '../api/vulnerability'
 
 // 1. 统计数据存储
@@ -96,10 +103,20 @@ const stats = reactive({
 })
 
 // 2. 图表DOM引用
+const thirtyDaysChartRef = ref(null)  // 近30天曲线图
 const dailyChartRef = ref(null)       // 近7天柱状图
 const monthlyChartRef = ref(null)     // 近12月折线图
 const hazardPieChartRef = ref(null)   // 威胁程度饼状图
-const typeBarChartRef = ref(null)     // 漏洞类型柱状图
+const tagPieChartRef = ref(null)      // 标签统计饼状图
+
+// 2.1 图表实例引用
+let thirtyDaysChartInstance = null    // 近30天图表实例
+let dailyChartInstance = null         // 近7天图表实例
+
+// 2.2 Tabs 状态
+const dailyTabKey = ref('7days')      // 每日趋势标签页状态
+const thirtyDaysDataLoaded = ref(false)  // 近30天数据是否已加载
+const thirtyDaysLoading = ref(false)     // 近30天数据加载中
 
 // 3. 辅助函数：生成本地时区日期（YYYY-MM-DD）
 const getLocalDate = (date) => {
@@ -109,10 +126,136 @@ const getLocalDate = (date) => {
   return `${year}-${month}-${day}`
 }
 
-// 4. 初始化近7天柱状图
+// 3.1 辅助函数：补全近N天的数据（确保每天都有记录，缺失的补0）
+const fillMissingDays = (data, days) => {
+  const result = []
+  const today = new Date()
+
+  // 生成近N天的日期列表
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(today)
+    date.setDate(today.getDate() - i)
+    const dateStr = getLocalDate(date)
+
+    // 查找该日期的数据
+    const found = data.find(item => item.date === dateStr)
+
+    result.push({
+      date: dateStr,
+      count: found ? found.count : 0
+    })
+  }
+
+  return result
+}
+
+// 3.2 辅助函数：补全近N个月的数据（确保每月都有记录，缺失的补0）
+const fillMissingMonths = (data, months) => {
+  const result = []
+  const today = new Date()
+
+  // 生成近N个月的月份列表
+  for (let i = months - 1; i >= 0; i--) {
+    const date = new Date(today.getFullYear(), today.getMonth() - i, 1)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const monthStr = `${year}-${month}`
+
+    // 查找该月份的数据
+    const found = data.find(item => {
+      const itemMonth = (item.month || '').slice(0, 7)
+      return itemMonth === monthStr
+    })
+
+    result.push({
+      month: monthStr,
+      count: found ? found.count : 0
+    })
+  }
+
+  return result
+}
+
+// 4. 初始化近30天曲线图
+const initThirtyDaysChart = (thirtyDaysData) => {
+  if (!thirtyDaysChartRef.value) return
+  const chart = echarts.init(thirtyDaysChartRef.value)
+  thirtyDaysChartInstance = chart  // 保存图表实例
+
+  const xData = thirtyDaysData.map(item => item.date || '')
+  const yData = thirtyDaysData.map(item => item.count ? Number(item.count) : 0)
+
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      borderColor: '#ddd',
+      borderWidth: 1,
+      textStyle: { color: '#333' },
+      formatter: '{b}<br/>新增漏洞：{c} 个'
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '10%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: xData,
+      axisLabel: {
+        interval: 'auto',
+        rotate: 30,
+        color: '#333',
+        fontSize: 12,
+        fontWeight: 500
+      },
+      axisLine: { lineStyle: { color: '#d9d9d9' } }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      axisLabel: {
+        formatter: '{value} 个',
+        color: '#333',
+        fontSize: 13,
+        fontWeight: 500
+      },
+      splitLine: { lineStyle: { color: '#f0f0f0' } },
+      axisLine: { lineStyle: { color: '#d9d9d9' } }
+    },
+    series: [
+      {
+        name: '每日新增',
+        type: 'line',
+        data: yData,
+        smooth: true,
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(24, 144, 255, 0.3)' },
+            { offset: 1, color: 'rgba(24, 144, 255, 0)' }
+          ])
+        },
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { width: 2, color: '#1890ff' },
+        itemStyle: { color: '#1890ff' },
+        emphasis: { scale: true }
+      }
+    ]
+  }
+
+  chart.setOption(option)
+  const handleResize = () => chart.resize()
+  window.addEventListener('resize', handleResize)
+  onUnmounted(() => window.removeEventListener('resize', handleResize))
+}
+
+// 5. 初始化近7天柱状图
 const initDailyChart = (dailyData) => {
   if (!dailyChartRef.value) return
   const chart = echarts.init(dailyChartRef.value)
+  dailyChartInstance = chart  // 保存图表实例
 
   const xData = dailyData.map(item => item.date || '')
   const yData = dailyData.map(item => item.count ? Number(item.count) : 0)
@@ -139,19 +282,23 @@ const initDailyChart = (dailyData) => {
       axisLabel: {
         rotate: 30,
         interval: 0,
-        textStyle: { fontSize: 12 }
+        color: '#333',
+        fontSize: 13,
+        fontWeight: 500
       },
-      axisLine: { lineStyle: { color: '#f0f0f0' } }
+      axisLine: { lineStyle: { color: '#d9d9d9' } }
     },
     yAxis: {
       type: 'value',
       min: 0,
       axisLabel: {
         formatter: '{value} 个',
-        textStyle: { fontSize: 12 }
+        color: '#333',
+        fontSize: 13,
+        fontWeight: 500
       },
-      splitLine: { lineStyle: { color: '#f7f8fa' } },
-      axisLine: { lineStyle: { color: '#f0f0f0' } }
+      splitLine: { lineStyle: { color: '#f0f0f0' } },
+      axisLine: { lineStyle: { color: '#d9d9d9' } }
     },
     series: [
       {
@@ -191,7 +338,7 @@ const initMonthlyChart = (monthlyData) => {
   if (!monthlyChartRef.value) return
   const chart = echarts.init(monthlyChartRef.value)
 
-  const xData = monthlyData.map(item => item.date || '')
+  const xData = monthlyData.map(item => item.month || item.date || '')
   const yData = monthlyData.map(item => item.count ? Number(item.count) : 0)
 
   const option = {
@@ -212,12 +359,25 @@ const initMonthlyChart = (monthlyData) => {
     xAxis: {
       type: 'category',
       data: xData,
-      axisLabel: { interval: 0 }
+      axisLabel: {
+        interval: 0,
+        color: '#333',
+        fontSize: 13,
+        fontWeight: 500
+      },
+      axisLine: { lineStyle: { color: '#d9d9d9' } }
     },
     yAxis: {
       type: 'value',
       min: 0,
-      axisLabel: { formatter: '{value} 个' }
+      axisLabel: {
+        formatter: '{value} 个',
+        color: '#333',
+        fontSize: 13,
+        fontWeight: 500
+      },
+      splitLine: { lineStyle: { color: '#f0f0f0' } },
+      axisLine: { lineStyle: { color: '#d9d9d9' } }
     },
     series: [
       {
@@ -301,29 +461,38 @@ const initHazardPieChart = (hazardData) => {
   onUnmounted(() => window.removeEventListener('resize', handleResize))
 }
 
+// 初始化标签统计饼状图
+const initTagPieChart = (tagData) => {
+  if (!tagPieChartRef.value) return;
+  const chart = echarts.init(tagPieChartRef.value);
 
-const initTypePieChart = (typeData) => { // <-- 函数名重命名，更符合逻辑
-  if (!typeBarChartRef.value) return;
-  const chart = echarts.init(typeBarChartRef.value);
+  // 只显示前10个标签，避免图例过多
+  const topTags = tagData.slice(0, 10);
 
-  // 处理数据，格式化为 [{name: '类型名', value: 数量}, ...]
-  const pieData = typeData.map(item => ({
-    name: item.name || item.type,
-    value: item.count || item.value || 0
+  const pieData = topTags.map(item => ({
+    name: item.tag || item.name,
+    value: Number(item.count || item.value || 0)
   }));
 
-  // 计算总数，用于在 label 中显示百分比
   const total = pieData.reduce((sum, item) => sum + item.value, 0);
 
   const option = {
     tooltip: {
       trigger: 'item',
-      formatter: '{b}: {c} 个 ({d}%)' // {b}名称, {c}数值, {d}百分比
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      borderColor: '#ddd',
+      borderWidth: 1,
+      textStyle: { color: '#333' },
+      formatter: '{b}<br/>漏洞数量：{c} 个<br/>占比：{d}%'
     },
     legend: {
       orient: 'vertical',
       left: 10,
       top: 'center',
+      textStyle: {
+        fontSize: 13,
+        color: '#333'
+      },
       formatter: (name) => {
         const item = pieData.find(i => i.name === name);
         const percent = item ? ((item.value / total) * 100).toFixed(1) : 0;
@@ -332,9 +501,10 @@ const initTypePieChart = (typeData) => { // <-- 函数名重命名，更符合�
     },
     series: [
       {
-        name: '漏洞类型',
-        type: 'pie', // <-- 核心修改：将 'bar' 改为 'pie'
-        radius: ['40%', '70%'], // 环形图，内半径40%，外半径70%
+        name: '标签统计',
+        type: 'pie',
+        radius: ['40%', '70%'],
+        center: ['60%', '50%'],
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 10,
@@ -348,22 +518,26 @@ const initTypePieChart = (typeData) => { // <-- 函数名重命名，更符合�
         emphasis: {
           label: {
             show: true,
-            fontSize: 20,
+            fontSize: 18,
             fontWeight: 'bold'
+          },
+          itemStyle: {
+            shadowBlur: 10,
+            shadowOffsetX: 0,
+            shadowColor: 'rgba(0, 0, 0, 0.5)'
           }
         },
         labelLine: {
           show: false
         },
         data: pieData,
-        // 自定义颜色，与威胁程度饼图区分开
-        color: ['#1890ff', '#40a9ff', '#6ba5ff', '#94bfff', '#bedeff'] 
+        color: ['#52c41a', '#faad14', '#1890ff', '#722ed1', '#eb2f96', '#13c2c2', '#fa8c16', '#2f54eb', '#f5222d', '#a0d911']
       }
     ]
   };
 
   chart.setOption(option);
-  
+
   const handleResize = () => chart.resize();
   window.addEventListener('resize', handleResize);
   onUnmounted(() => {
@@ -377,27 +551,33 @@ const loadData = async () => {
     // 第一步：加载近7天每日数据
     const dailyRes = await getDailyNewVuln(7)
     const dailyList = dailyRes.data?.data || []
-    
-    stats.week = dailyList.reduce((sum, item) => sum + (item.count ? Number(item.count) : 0), 0)
-    
+
+    // 补全近7天数据，确保每天都有记录
+    const completeDailyList = fillMissingDays(dailyList, 7)
+
+    stats.week = completeDailyList.reduce((sum, item) => sum + (item.count ? Number(item.count) : 0), 0)
+
     const today = getLocalDate(new Date())
-    const todayItem = dailyList.find(item => item.date === today)
+    const todayItem = completeDailyList.find(item => item.date === today)
     stats.today = todayItem ? Number(todayItem.count) : 0
 
-    initDailyChart(dailyList)
+    initDailyChart(completeDailyList)
 
     // 第二步：加载近12月每月数据
     const monthlyRes = await getMonthlyNewVuln(12)
     const monthlyList = monthlyRes.data?.data || []
-    
+
+    // 补全近12个月数据，确保每月都有记录
+    const completeMonthlyList = fillMissingMonths(monthlyList, 12)
+
     const currentMonth = getLocalDate(new Date()).slice(0, 7)
-    const currentMonthItem = monthlyList.find(item => {
+    const currentMonthItem = completeMonthlyList.find(item => {
       const itemMonth = (item.month || '').slice(0, 7)
       return itemMonth === currentMonth
     })
     stats.month = currentMonthItem ? Number(currentMonthItem.count) : 0
 
-    initMonthlyChart(monthlyList)
+    initMonthlyChart(completeMonthlyList)
 
     // 第三步：加载威胁程度统计数据
     const hazardRes = await getVulnerabilityHazardStats()
@@ -405,17 +585,15 @@ const loadData = async () => {
     if (hazardList.length > 0) {
       initHazardPieChart(hazardList)
     }
-    
-    // --------------------------
-    // 第四步：加载漏洞类型数量统计数据
-    // --------------------------
-    const typeRes = await getVulnerabilityTypeCount();
-    const typeList = typeRes.data?.data || [];
-    console.log("漏洞类型数量数据:", typeList);
 
-    // 初始化漏洞类型柱状图
-    if (typeList.length > 0) {
-      initTypePieChart(typeList);
+    // 第四步：加载标签统计数据
+    const tagRes = await getTagCount();
+    const tagList = tagRes.data?.data || [];
+    console.log("标签统计数据:", tagList);
+
+    // 初始化标签统计饼状图
+    if (tagList.length > 0) {
+      initTagPieChart(tagList);
     }
 
   } catch (error) {
@@ -423,6 +601,41 @@ const loadData = async () => {
     stats.today = stats.week = stats.month = 0
   }
 }
+
+// 7.1 加载近30天数据
+const loadThirtyDaysData = async () => {
+  if (thirtyDaysDataLoaded.value || thirtyDaysLoading.value) {
+    return
+  }
+
+  thirtyDaysLoading.value = true
+  try {
+    const thirtyDaysRes = await getDailyNewVuln(30)
+    const thirtyDaysList = thirtyDaysRes.data?.data || []
+
+    // 补全近30天数据，确保每天都有记录
+    const completeThirtyDaysList = fillMissingDays(thirtyDaysList, 30)
+
+    initThirtyDaysChart(completeThirtyDaysList)
+    thirtyDaysDataLoaded.value = true
+
+    await nextTick()
+    if (thirtyDaysChartInstance) {
+      thirtyDaysChartInstance.resize()
+    }
+  } catch (error) {
+    console.error('近30天数据加载失败:', error)
+  } finally {
+    thirtyDaysLoading.value = false
+  }
+}
+
+// 8. 监听 Tab 切换，按需加载数据
+watch(dailyTabKey, async (newKey) => {
+  if (newKey === '30days') {
+    await loadThirtyDaysData()
+  }
+})
 
 onMounted(() => {
   loadData()
@@ -433,6 +646,8 @@ onMounted(() => {
 .dashboard-container {
   padding: 24px;
   background-color: #fafafa;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .stat-row {
@@ -453,20 +668,21 @@ onMounted(() => {
 }
 
 .chart-row {
-  display: flex;
-  flex-wrap: nowrap; /* 禁止换行 */
-  gap: 24px;         /* 设置间距 */
+  margin-bottom: 24px;
 }
 
 .chart-card {
   background: #fff;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
 }
 
 .chart-container {
   height: 350px;
   padding: 16px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 :deep(.ant-card-head) {
@@ -476,6 +692,7 @@ onMounted(() => {
 
 :deep(.ant-card-body) {
   padding: 24px;
+  overflow: hidden;
 }
 
 :deep(.ant-statistic-title) {

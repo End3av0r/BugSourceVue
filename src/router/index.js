@@ -27,11 +27,6 @@ const routes = [
     component: () => import('../views/VulnerabilityDetail.vue')
   },
   {
-    path: '/tag-management',
-    name: 'TagManagement',
-    component: () => import('../views/TagManagement.vue')
-  },
-  {
     path: '/tag-definition',
     name: 'TagDefinitionManagement',
     component: () => import('../views/TagDefinitionManagement.vue')
